@@ -17,10 +17,8 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, '../frontend')));
 
-// Hugging Face API
 const HF_API_URL = "https://api-inference.huggingface.co/models/";
 
-// Função para gerar mídia
 async function generateMedia(apiKey, model, prompt, ratio) {
     const payload = { inputs: prompt, options: { wait_for_model: true } };
 
@@ -46,7 +44,6 @@ async function generateMedia(apiKey, model, prompt, ratio) {
     return Buffer.from(buffer).toString('base64');
 }
 
-// Rotas
 app.get('/', (req, res) => {
     res.sendFile('index.html', { root: path.join(__dirname, '../frontend') });
 });
