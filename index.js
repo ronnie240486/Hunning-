@@ -1,107 +1,86 @@
 import express from 'express';
+import path from 'path';
 import cors from 'cors';
 import fetch from 'node-fetch';
-import dotenv from 'dotenv';
-
-// Carrega variáveis de ambiente do arquivo .env
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// --- Middlewares ---
-// 1. Habilita o CORS para permitir requisições do frontend
-app.use(cors());
-// 2. Habilita o parsing de corpos de requisição em JSON
-app.use(express.json());
+// --- MIDDLEWARES ---
+app.use(cors()); // Permite requisições do frontend
+app.use(express.json({ limit: '50mb' })); // Para receber JSON grande
+app.use(express.static(path.join(process.cwd(), 'frontend'))); // Servir arquivos do frontend
 
-/**
- * Função para consultar a API de Inferência da Hugging Face.
- * @param {string} model - O ID do modelo a ser consultado.
- * @param {string} apiKey - A chave da API da Hugging Face.
- * @param {object} payload - Os dados a serem enviados para o modelo.
- * @returns {Promise<Buffer>} - Uma promessa que resolve para os dados binários da mídia.
- */
-async function queryHuggingFace(model, apiKey, payload) {
-    const API_URL = `https://api-inference.huggingface.co/models/${model}`;
-    const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-    });
+// --- ROTA RAIZ ---
+app.get('/', (req, res) => {
+    res.sendFile(path.join(process.cwd(), 'frontend', 'index.html'));
+});
 
-    if (!response.ok) {
-        // Tenta ler a resposta de erro como texto para dar mais detalhes
-        const errorDetails = await response.text();
-        console.error(`Erro na API da Hugging Face: ${response.status}`, errorDetails);
-        // Retorna um erro mais claro para o frontend
-        throw new Error(`Erro na API da Hugging Face: ${errorDetails}`);
-    }
-
-    // Pega a resposta como um Buffer (dados binários)
-    const arrayBuffer = await response.arrayBuffer();
-    return Buffer.from(arrayBuffer);
-}
-
-/**
- * Manipulador genérico para requisições de geração de mídia.
- * @param {'image' | 'video'} type - O tipo de mídia a ser gerada.
- * @param {express.Request} req - O objeto de requisição do Express.
- * @param {express.Response} res - O objeto de resposta do Express.
- */
-async function handleGenerationRequest(type, req, res) {
-    const { apiKey, prompts, model, ratio } = req.body;
-
-    if (!apiKey || !prompts || !model) {
-        return res.status(400).json({ error: 'Campos obrigatórios ausentes: apiKey, prompts, model.' });
-    }
-
-    console.log(`Recebida requisição para gerar ${prompts.length} ${type}(s) com o modelo: ${model}`);
-
+// --- FUNÇÃO AUXILIAR PARA CHAMAR HUGGING FACE ---
+async function generateFromHF(apiKey, model, inputs) {
     try {
-        const results = [];
-        for (const prompt of prompts) {
-            const payload = { inputs: prompt };
+        const response = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
+            method: 'POST',
+            headers: { 
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(inputs)
+        });
 
-            if (type === 'image' && model.includes('stable-diffusion-xl')) {
-                payload.parameters = {};
-                const [w, h] = ratio.split(':').map(Number);
-                if (w > h) {
-                    payload.parameters.width = 1024;
-                    payload.parameters.height = Math.round(1024 * (h / w));
-                } else {
-                    payload.parameters.height = 1024;
-                    payload.parameters.width = Math.round(1024 * (w / h));
-                }
-            }
-
-            const mediaBuffer = await queryHuggingFace(model, apiKey, payload);
-            
-            // **A PARTE MAIS IMPORTANTE DA CORREÇÃO ESTÁ AQUI**
-            // Converte os dados binários da imagem/vídeo para uma string Base64.
-            const base64String = mediaBuffer.toString('base64');
-            results.push(base64String);
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`Hugging Face API error: ${text}`);
         }
 
-        // Envia os resultados de volta para o frontend no formato JSON esperado.
-        res.json({ data: results });
-
+        // Para imagens ou vídeos, retornamos ArrayBuffer e depois Base64
+        const buffer = await response.arrayBuffer();
+        const base64 = Buffer.from(buffer).toString('base64');
+        return base64;
     } catch (error) {
-        console.error('Erro durante a geração de mídia:', error);
-        // Envia o erro como JSON para que o frontend possa exibi-lo corretamente.
-        res.status(500).json({ error: error.message });
+        throw error;
     }
 }
 
-// --- Endpoints da API ---
-app.post('/generate-image', (req, res) => handleGenerationRequest('image', req, res));
-app.post('/generate-video', (req, res) => handleGenerationRequest('video', req, res));
+// --- ROTA GERAR IMAGEM ---
+app.post('/generate-image', async (req, res) => {
+    const { apiKey, prompts, model } = req.body;
+    if (!apiKey || !prompts || !Array.isArray(prompts)) {
+        return res.status(400).json({ error: 'API Key e prompts são obrigatórios' });
+    }
 
-// --- Início do Servidor ---
+    try {
+        const data = [];
+        for (const prompt of prompts) {
+            const base64 = await generateFromHF(apiKey, model, { inputs: prompt });
+            data.push(base64);
+        }
+        res.json({ data });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- ROTA GERAR VÍDEO ---
+app.post('/generate-video', async (req, res) => {
+    const { apiKey, prompts, model } = req.body;
+    if (!apiKey || !prompts || !Array.isArray(prompts)) {
+        return res.status(400).json({ error: 'API Key e prompts são obrigatórios' });
+    }
+
+    try {
+        const data = [];
+        for (const prompt of prompts) {
+            const base64 = await generateFromHF(apiKey, model, { inputs: prompt });
+            data.push(base64);
+        }
+        res.json({ data });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- START SERVER ---
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
-    console.log('CORS habilitado, pronto para receber requisições do frontend.');
+    console.log(`Server running on port ${PORT}`);
 });
