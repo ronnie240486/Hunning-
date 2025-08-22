@@ -93,7 +93,6 @@ app.post('/generate-video', async (req,res)=>{
 });
 
 // --- START SERVER ---
-app.listen(PORT, ()=>{
-    console.log(`Servidor rodando na porta ${PORT}`);
+app.listen(PORT, () => {
+    console.log(`✅ Servidor rodando na porta ${PORT}`);
 });
-porta ${PORT}`));
