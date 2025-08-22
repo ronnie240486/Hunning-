@@ -1,94 +1,100 @@
+// index.js
 import express from 'express';
 import cors from 'cors';
-import fetch from 'node-fetch';
-import dotenv from 'dotenv';
 import path from 'path';
-import { fileURLToPath } from 'url';
-
-dotenv.config();
+import fetch from 'node-fetch';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// --- Middleware ---
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-// --- Serve frontend ---
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-app.use(express.static(path.join(__dirname, '../frontend')));
+// --- Servir frontend estático ---
+const frontendPath = path.join(path.resolve(), 'frontend');
+app.use(express.static(frontendPath));
 
-// --- Hugging Face API URL ---
-const HF_API_URL = "https://api-inference.huggingface.co/models/";
+// --- Rota raiz serve index.html ---
+app.get('/', (req, res) => {
+    res.sendFile(path.join(frontendPath, 'index.html'));
+});
 
-// --- Função para gerar mídia ---
-async function generateMedia(apiKey, model, prompt, ratio) {
-    const payload = { inputs: prompt, options: { wait_for_model: true } };
-
-    if (ratio) {
-        payload.parameters = {
-            width: ratio === '16:9' ? 1024 : ratio === '9:16' ? 576 : 768,
-            height: ratio === '16:9' ? 576 : ratio === '9:16' ? 1024 : 768
-        };
-    }
-
-    const response = await fetch(`${HF_API_URL}${model}`, {
-        method: 'POST',
-        headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Erro Hugging Face: ${response.status} - ${text}`);
-    }
-
-    const buffer = await response.arrayBuffer();
-    return Buffer.from(buffer).toString('base64');
-}
-
-// --- Rotas ---
-// Gerar imagem
+// --- Endpoint para gerar imagens ---
 app.post('/generate-image', async (req, res) => {
     try {
-        const { prompts, model, ratio } = req.body;
-        const apiKey = req.headers['x-api-key'] || req.body.apiKey;
-        if (!apiKey) return res.status(400).json({ error: "API Key necessária" });
+        const { apiKey, prompts, model, ratio } = req.body;
+
+        if (!apiKey || !prompts || !Array.isArray(prompts) || !model) {
+            return res.status(400).json({ error: 'Parâmetros inválidos.' });
+        }
 
         const results = [];
-        for (const p of prompts) {
-            const base64 = await generateMedia(apiKey, model, p, ratio);
-            results.push(base64);
+
+        for (let prompt of prompts) {
+            const response = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ inputs: prompt })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                return res.status(500).json({ error: errorText });
+            }
+
+            const buffer = Buffer.from(await response.arrayBuffer());
+            results.push(buffer.toString('base64'));
         }
+
         res.json({ data: results });
-    } catch (e) {
-        console.error(e);
-        res.status(500).send(e.message);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: err.message });
     }
 });
 
-// Gerar vídeo
+// --- Endpoint para gerar vídeos (exemplo simplificado) ---
 app.post('/generate-video', async (req, res) => {
     try {
-        const { prompts, model, ratio } = req.body;
-        const apiKey = req.headers['x-api-key'] || req.body.apiKey;
-        if (!apiKey) return res.status(400).json({ error: "API Key necessária" });
+        const { apiKey, prompts, model } = req.body;
+
+        if (!apiKey || !prompts || !Array.isArray(prompts) || !model) {
+            return res.status(400).json({ error: 'Parâmetros inválidos.' });
+        }
 
         const results = [];
-        for (const p of prompts) {
-            const base64 = await generateMedia(apiKey, model, p, ratio);
-            results.push(base64);
+
+        for (let prompt of prompts) {
+            const response = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ inputs: prompt })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                return res.status(500).json({ error: errorText });
+            }
+
+            const buffer = Buffer.from(await response.arrayBuffer());
+            results.push(buffer.toString('base64'));
         }
+
         res.json({ data: results });
-    } catch (e) {
-        console.error(e);
-        res.status(500).send(e.message);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: err.message });
     }
 });
 
-// --- Start Server ---
+// --- Start server ---
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-    console.log(`CORS is enabled, ready to accept requests from the frontend.`);
+    console.log(`Servidor rodando em http://localhost:${PORT}`);
 });
+
