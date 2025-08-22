@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gerador de Mídia com IA - Hugging Face</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+    body { font-family: 'Inter', sans-serif; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 1s linear infinite; }
+    button:disabled, select:disabled { cursor: not-allowed; opacity: 0.6; }
+    select {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+        background-position: right 0.5rem center;
+        background-repeat: no-repeat;
+        background-size: 1.5em 1.5em;
+        padding-right: 2.5rem;
+        appearance: none;
+    }
+</style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex items-center justify-center p-4">
+
+<div class="w-full max-w-5xl bg-gray-800 rounded-2xl shadow-2xl p-6 md:p-8 space-y-6">
+    
+    <div class="text-center">
+        <h1 class="text-3xl md:text-4xl font-bold text-cyan-400">Gerador de Mídia com IA</h1>
+        <p class="text-gray-400 mt-2">Crie imagens e vídeos incríveis usando a API da Hugging Face.</p>
+    </div>
+
+    <div class="space-y-4">
+        <div>
+            <label for="api-key" class="block text-sm font-medium text-gray-300 mb-2">Sua Chave da API Hugging Face (enviada ao seu servidor)</label>
+            <input type="password" id="api-key" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="Cole sua chave de API aqui (ex: hf_...)">
+        </div>
+        <div>
+            <label for="prompt" class="block text-sm font-medium text-gray-300 mb-2">Digite seus prompts (uma linha = um prompt)</label>
+            <textarea id="prompt" rows="4" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="Ex: Um astronauta surfando em uma onda cósmica..."></textarea>
+        </div>
+    </div>
+
+    <div class="space-y-4">
+        <h3 class="text-lg font-semibold text-gray-200 border-b border-gray-700 pb-2">Opções Avançadas</h3>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label for="image-model-select" class="block text-sm font-medium text-gray-300 mb-2">Modelo de Imagem</label>
+                <select id="image-model-select" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white">
+                    <option value="stabilityai/stable-diffusion-xl-base-1.0">Stable Diffusion XL</option>
+                    <option value="runwayml/stable-diffusion-v1-5">Stable Diffusion 1.5</option>
+                    <option value="Lykon/dreamshaper-xl-1-0">DreamShaper XL</option>
+                    <option value="SG161222/Realistic_Vision_V5.1_noVAE">Realistic Vision V5.1</option>
+                    <option value="kandinsky-community/kandinsky-2-2-decoder">Kandinsky 2.2</option>
+                </select>
+            </div>
+            <div>
+                <label for="video-model-select" class="block text-sm font-medium text-gray-300 mb-2">Modelo de Vídeo</label>
+                <select id="video-model-select" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white">
+                    <option value="cerspense/zeroscope_v2_576w">ZeroScope v2</option>
+                    <option value="showlab/Tune-A-Video">Tune-A-Video</option>
+                    <option value="strangeman3107/animov-512x">Animov 512x</option>
+                </select>
+            </div>
+            <div>
+                <label for="style-select" class="block text-sm font-medium text-gray-300 mb-2">Adicionar Estilo</label>
+                <select id="style-select" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white">
+                    <option value="">Selecione um estilo...</option>
+                    <optgroup label="Artístico">
+                        <option value="photorealistic">Fotorrealista</option>
+                        <option value="hyperrealistic">Hiper-realista</option>
+                        <option value="digital art">Arte Digital</option>
+                        <option value="oil painting">Pintura a óleo</option>
+                        <option value="watercolor">Aquarela</option>
+                    </optgroup>
+                    <optgroup label="Tema">
+                        <option value="fantasy">Fantasia</option>
+                        <option value="cyberpunk">Cyberpunk</option>
+                        <option value="steampunk">Steampunk</option>
+                        <option value="film noir">Noir</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div>
+                <label for="ratio-select" class="block text-sm font-medium text-gray-300 mb-2">Proporção (para SDXL)</label>
+                <select id="ratio-select" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white">
+                    <option value="1:1">1:1 (Quadrado)</option>
+                    <option value="16:9">16:9 (Paisagem)</option>
+                    <option value="9:16">9:16 (Retrato)</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex flex-col sm:flex-row gap-4 pt-4 border-t border-gray-700">
+        <button id="generate-image-btn" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-lg transition-colors duration-200">Gerar Imagem</button>
+        <button id="generate-video-btn" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-lg transition-colors duration-200">Gerar Vídeo</button>
+    </div>
+
+    <div id="result-container" class="bg-gray-900 rounded-lg min-h-[300px] flex flex-wrap items-center justify-center p-4 border border-dashed border-gray-600 gap-4">
+        <div id="loader-wrapper" class="hidden text-center w-full">
+            <svg class="spinner w-12 h-12 text-cyan-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p id="status-text" class="mt-4 text-gray-400">Gerando...</p>
+        </div>
+        <p id="placeholder-text" class="text-gray-500">Sua mídia gerada aparecerá aqui...</p>
+    </div>
+
+</div>
+
+<script>
+// --- DOM Element References ---
+const apiKeyInput = document.getElementById('api-key');
+const promptInput = document.getElementById('prompt');
+const generateImageBtn = document.getElementById('generate-image-btn');
+const generateVideoBtn = document.getElementById('generate-video-btn');
+const imageModelSelect = document.getElementById('image-model-select');
+const videoModelSelect = document.getElementById('video-model-select');
+const styleSelect = document.getElementById('style-select');
+const ratioSelect = document.getElementById('ratio-select');
+const resultContainer = document.getElementById('result-container');
+const loaderWrapper = document.getElementById('loader-wrapper');
+const statusText = document.getElementById('status-text');
+const placeholderText = document.getElementById('placeholder-text');
+
+// --- Backend Configuration ---
+const BACKEND_URL = 'http://localhost:8080';
+
+/**
+ * Toggles the UI into a loading state, disabling controls.
+ * @param {boolean} isLoading - Whether to enter or exit the loading state.
+ * @param {string} [message="Gerando..."] - The message to display while loading.
+ */
+function setLoadingState(isLoading, message = "Gerando...") {
+    [generateImageBtn, generateVideoBtn, apiKeyInput, promptInput, imageModelSelect, videoModelSelect, styleSelect, ratioSelect].forEach(el => el.disabled = isLoading);
+    
+    if (isLoading) {
+        resultContainer.innerHTML = ''; // Clear previous results
+        placeholderText.classList.add('hidden');
+        loaderWrapper.classList.remove('hidden');
+        statusText.textContent = message;
+        resultContainer.appendChild(loaderWrapper);
+    } else {
+        loaderWrapper.classList.add('hidden');
+        if (!resultContainer.hasChildNodes()) {
+            placeholderText.classList.remove('hidden');
+            resultContainer.appendChild(placeholderText);
+        }
+    }
+}
+
+/**
+ * Displays an error message in the result container.
+ * @param {string} message - The error message to display.
+ */
+function showError(message) {
+    resultContainer.innerHTML = ''; // Clear any loaders or previous results
+    placeholderText.textContent = "Erro: " + message;
+    placeholderText.classList.remove('hidden');
+    resultContainer.appendChild(placeholderText);
+}
+
+/**
+ * Main handler for generating images or videos by calling the backend server.
+ * @param {'image' | 'video'} type - The type of media to generate.
+ */
+async function handleGeneration(type) {
+    const apiKey = apiKeyInput.value.trim();
+    if (!apiKey) {
+        showError("Por favor, insira sua chave da API Hugging Face para enviar ao servidor.");
+        return;
+    }
+
+    const prompts = promptInput.value.split('\n').map(p => p.trim()).filter(Boolean);
+    if (prompts.length === 0) {
+        showError("Por favor, digite pelo menos um prompt.");
+        return;
+    }
+
+    const model = type === 'image' ? imageModelSelect.value : videoModelSelect.value;
+    const ratio = ratioSelect.value;
+    const endpoint = type === 'image' ? '/generate-image' : '/generate-video';
+
+    setLoadingState(true, `Enviando para o servidor... (${prompts.length} prompts)`);
+
+    try {
+        const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                apiKey,
+                prompts,
+                model,
+                ratio 
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(errorText || `Falha na requisição: status ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (!result.data || !Array.isArray(result.data)) {
+            throw new Error("Formato de resposta do servidor inválido. Esperado: { data: [...] }");
+        }
+        
+        // Clear loader and placeholder before showing results
+        resultContainer.innerHTML = '';
+
+        result.data.forEach(base64Data => {
+            let mediaElement;
+            if (type === 'image') {
+                mediaElement = document.createElement('img');
+                mediaElement.src = `data:image/jpeg;base64,${base64Data}`;
+                mediaElement.className = 'max-w-full max-h-[512px] rounded-lg shadow-lg';
+            } else { // video
+                mediaElement = document.createElement('video');
+                mediaElement.src = `data:video/mp4;base64,${base64Data}`;
+                mediaElement.controls = true;
+                mediaElement.autoplay = false;
+                mediaElement.loop = true;
+                mediaElement.muted = true;
+                mediaElement.className = 'max-w-full max-h-[512px] rounded-lg shadow-lg';
+            }
+            resultContainer.appendChild(mediaElement);
+        });
+
+    } catch (error) {
+        showError(error.message);
+    } finally {
+        setLoadingState(false);
+    }
+}
+
+// --- Event Listeners ---
+
+styleSelect.addEventListener('change', (e) => {
+    const selectedStyle = e.target.value;
+    if (selectedStyle) {
+        const currentPrompt = promptInput.value.trim();
+        const separator = currentPrompt === '' ? '' : ', ';
+        promptInput.value = `${currentPrompt}${separator}${selectedStyle}`;
+        e.target.selectedIndex = 0;
+    }
+});
+
+generateImageBtn.addEventListener('click', () => handleGeneration('image'));
+generateVideoBtn.addEventListener('click', () => handleGeneration('video'));
+
+// --- Local Storage for API Key ---
+
+window.addEventListener('DOMContentLoaded', () => {
+    const savedApiKey = localStorage.getItem('huggingface_api_key');
+    if (savedApiKey) {
+        apiKeyInput.value = savedApiKey;
+    }
+});
+
+apiKeyInput.addEventListener('input', () => {
+    localStorage.setItem('huggingface_api_key', apiKeyInput.value);
+});
+
+</script>
+
+</body>
+</html>
