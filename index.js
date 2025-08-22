@@ -1,3 +1,4 @@
+// backend/index.js
 import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
@@ -6,27 +7,35 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 dotenv.config();
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// --- MIDDLEWARES ---
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// Servir frontend
 app.use(express.static(path.join(__dirname, '../frontend')));
 
+// --- CONSTANTES ---
 const HF_API_URL = "https://api-inference.huggingface.co/models/";
 
+// --- FUNÇÃO PARA CHAMAR HUGGING FACE ---
 async function generateMedia(apiKey, model, prompt, ratio) {
     const payload = { inputs: prompt, options: { wait_for_model: true } };
 
     if (ratio) {
-        payload.parameters = {
-            width: ratio === '16:9' ? 1024 : ratio === '9:16' ? 576 : 768,
-            height: ratio === '16:9' ? 576 : ratio === '9:16' ? 1024 : 768
-        };
+        let width, height;
+        switch(ratio){
+            case '16:9': width=1024; height=576; break;
+            case '9:16': width=576; height=1024; break;
+            case '1:1': width=768; height=768; break;
+            default: width=768; height=768;
+        }
+        payload.parameters = { width, height };
     }
 
     const response = await fetch(`${HF_API_URL}${model}`, {
@@ -44,48 +53,47 @@ async function generateMedia(apiKey, model, prompt, ratio) {
     return Buffer.from(buffer).toString('base64');
 }
 
-app.get('/', (req, res) => {
-    res.sendFile('index.html', { root: path.join(__dirname, '../frontend') });
-});
-
-app.post('/generate-image', async (req, res) => {
-    try {
+// --- ROTAS ---
+// Gerar imagem
+app.post('/generate-image', async (req,res)=>{
+    try{
         const { prompts, model, ratio } = req.body;
-        const apiKey = process.env.HF_API_KEY;
-
-        if (!apiKey) return res.status(400).json({ error: "API Key necessária" });
+        const apiKey = req.headers['x-api-key'] || req.body.apiKey;
+        if(!apiKey) return res.status(400).json({error:"API Key necessária"});
 
         const results = [];
-        for (const p of prompts) {
+        for(const p of prompts){
             const base64 = await generateMedia(apiKey, model, p, ratio);
             results.push(base64);
         }
-
         res.json({ data: results });
-    } catch (e) {
+    } catch(e){
         console.error(e);
-        res.status(500).json({ error: e.message });
+        res.status(500).send(e.message);
     }
 });
 
-app.post('/generate-video', async (req, res) => {
-    try {
+// Gerar vídeo
+app.post('/generate-video', async (req,res)=>{
+    try{
         const { prompts, model, ratio } = req.body;
-        const apiKey = process.env.HF_API_KEY;
-
-        if (!apiKey) return res.status(400).json({ error: "API Key necessária" });
+        const apiKey = req.headers['x-api-key'] || req.body.apiKey;
+        if(!apiKey) return res.status(400).json({error:"API Key necessária"});
 
         const results = [];
-        for (const p of prompts) {
+        for(const p of prompts){
             const base64 = await generateMedia(apiKey, model, p, ratio);
             results.push(base64);
         }
-
         res.json({ data: results });
-    } catch (e) {
+    } catch(e){
         console.error(e);
-        res.status(500).json({ error: e.message });
+        res.status(500).send(e.message);
     }
 });
 
-app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+// --- START SERVER ---
+app.listen(PORT, ()=>{
+    console.log(`Servidor rodando na porta ${PORT}`);
+});
+porta ${PORT}`));
