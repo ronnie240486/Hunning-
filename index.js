@@ -1,110 +1,107 @@
 import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
+// Carrega variáveis de ambiente do arquivo .env
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// --- MIDDLEWARES ---
+// --- Middlewares ---
+// 1. Habilita o CORS para permitir requisições do frontend
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-
-// --- SERVE FRONTEND ---
-app.use(express.static(path.join(__dirname, 'frontend')));
-
-// --- ROUTES ---
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'frontend', 'index.html'));
-});
+// 2. Habilita o parsing de corpos de requisição em JSON
+app.use(express.json());
 
 /**
- * Função genérica para chamar a Hugging Face
- * @param {string} apiKey - sua Hugging Face API Key
- * @param {string} model - nome do modelo
- * @param {Array<string>} prompts - lista de prompts
- * @returns {Array<string>} array de base64
+ * Função para consultar a API de Inferência da Hugging Face.
+ * @param {string} model - O ID do modelo a ser consultado.
+ * @param {string} apiKey - A chave da API da Hugging Face.
+ * @param {object} payload - Os dados a serem enviados para o modelo.
+ * @returns {Promise<Buffer>} - Uma promessa que resolve para os dados binários da mídia.
  */
-async function callHuggingFace(apiKey, model, prompts) {
-  try {
-    const response = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        inputs: prompts.join('\n'),
-        options: { wait_for_model: true },
-      }),
+async function queryHuggingFace(model, apiKey, payload) {
+    const API_URL = `https://api-inference.huggingface.co/models/${model}`;
+    const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Hugging Face API error: ${text}`);
+        // Tenta ler a resposta de erro como texto para dar mais detalhes
+        const errorDetails = await response.text();
+        console.error(`Erro na API da Hugging Face: ${response.status}`, errorDetails);
+        // Retorna um erro mais claro para o frontend
+        throw new Error(`Erro na API da Hugging Face: ${errorDetails}`);
     }
 
-    const data = await response.json();
-
-    // Para text-to-image, geralmente é retornado array base64
-    if (Array.isArray(data)) {
-      return data.map(item => item?.image || item?.binary || item?.base64).filter(Boolean);
-    }
-
-    // Alguns modelos retornam objeto com key "image" ou "video"
-    if (data.image || data.video) {
-      return [data.image || data.video];
-    }
-
-    throw new Error('Formato de resposta do Hugging Face inválido.');
-  } catch (error) {
-    throw error;
-  }
+    // Pega a resposta como um Buffer (dados binários)
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
 }
 
-// --- IMAGE ROUTE ---
-app.post('/generate-image', async (req, res) => {
-  const { apiKey, model, prompts } = req.body;
+/**
+ * Manipulador genérico para requisições de geração de mídia.
+ * @param {'image' | 'video'} type - O tipo de mídia a ser gerada.
+ * @param {express.Request} req - O objeto de requisição do Express.
+ * @param {express.Response} res - O objeto de resposta do Express.
+ */
+async function handleGenerationRequest(type, req, res) {
+    const { apiKey, prompts, model, ratio } = req.body;
 
-  if (!apiKey || !model || !prompts?.length) {
-    return res.status(400).json({ error: 'apiKey, model e prompts são obrigatórios.' });
-  }
+    if (!apiKey || !prompts || !model) {
+        return res.status(400).json({ error: 'Campos obrigatórios ausentes: apiKey, prompts, model.' });
+    }
 
-  try {
-    const imagesBase64 = await callHuggingFace(apiKey, model, prompts);
-    res.json({ data: imagesBase64 });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: e.message });
-  }
-});
+    console.log(`Recebida requisição para gerar ${prompts.length} ${type}(s) com o modelo: ${model}`);
 
-// --- VIDEO ROUTE ---
-app.post('/generate-video', async (req, res) => {
-  const { apiKey, model, prompts } = req.body;
+    try {
+        const results = [];
+        for (const prompt of prompts) {
+            const payload = { inputs: prompt };
 
-  if (!apiKey || !model || !prompts?.length) {
-    return res.status(400).json({ error: 'apiKey, model e prompts são obrigatórios.' });
-  }
+            if (type === 'image' && model.includes('stable-diffusion-xl')) {
+                payload.parameters = {};
+                const [w, h] = ratio.split(':').map(Number);
+                if (w > h) {
+                    payload.parameters.width = 1024;
+                    payload.parameters.height = Math.round(1024 * (h / w));
+                } else {
+                    payload.parameters.height = 1024;
+                    payload.parameters.width = Math.round(1024 * (w / h));
+                }
+            }
 
-  try {
-    const videosBase64 = await callHuggingFace(apiKey, model, prompts);
-    res.json({ data: videosBase64 });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: e.message });
-  }
-});
+            const mediaBuffer = await queryHuggingFace(model, apiKey, payload);
+            
+            // **A PARTE MAIS IMPORTANTE DA CORREÇÃO ESTÁ AQUI**
+            // Converte os dados binários da imagem/vídeo para uma string Base64.
+            const base64String = mediaBuffer.toString('base64');
+            results.push(base64String);
+        }
 
-// --- START SERVER ---
+        // Envia os resultados de volta para o frontend no formato JSON esperado.
+        res.json({ data: results });
+
+    } catch (error) {
+        console.error('Erro durante a geração de mídia:', error);
+        // Envia o erro como JSON para que o frontend possa exibi-lo corretamente.
+        res.status(500).json({ error: error.message });
+    }
+}
+
+// --- Endpoints da API ---
+app.post('/generate-image', (req, res) => handleGenerationRequest('image', req, res));
+app.post('/generate-video', (req, res) => handleGenerationRequest('video', req, res));
+
+// --- Início do Servidor ---
 app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-  console.log('CORS is enabled, ready to accept requests from the frontend.');
+    console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
+    console.log('CORS habilitado, pronto para receber requisições do frontend.');
 });
