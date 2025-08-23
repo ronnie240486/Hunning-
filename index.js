@@ -42,22 +42,25 @@ app.post('/generate', async (req, res) => {
   }
 });
 
-// 🔹 Função Hugging Face
+// 🔹 Função Hugging Face (modelo gratuito)
 async function generateWithHuggingFace(prompt) {
     const apiKey = process.env.HUGGINGFACE_API_KEY;
-    if (!apiKey) throw new Error('Chave de API do Hugging Face não configurada no backend.');
+    if (!apiKey) throw new Error('Chave de API do Hugging Face não configurada.');
 
-    const response = await fetch(
-        "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
-        {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ inputs: prompt }),
-        }
-    );
+    // Modelo gratuito alternativo
+    const modelURL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5";
+
+    const response = await fetch(modelURL, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            inputs: prompt,
+            options: { wait_for_model: true } // garante que o modelo carregue antes de gerar
+        }),
+    });
 
     if (!response.ok) {
         const errorBody = await response.text();
@@ -67,6 +70,7 @@ async function generateWithHuggingFace(prompt) {
     const buffer = await response.arrayBuffer();
     return Buffer.from(buffer).toString('base64');
 }
+
 
 // 🔹 Função Stability AI (pega primeiro modelo disponível automaticamente)
 async function generateWithStability(prompt, ratio = '1:1') {
