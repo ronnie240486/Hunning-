@@ -7,15 +7,14 @@ import OpenAI from 'openai';
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Chaves
-const HUGGINGFACE_KEY = process.env.HUGGINGFACE_API_KEY;
-const STABILITY_KEY = process.env.STABILITY_API_KEY;
-const OPENAI_KEY = process.env.OPENAI_API_KEY;
-const REPLICATE_KEY = process.env.REPLICATE_API_TOKEN;
-
 // Middlewares
 app.use(cors());
 app.use(express.json());
+
+// Inicializa OpenAI
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
 
 // ✅ Rota principal
 app.get('/', (req, res) => {
@@ -41,6 +40,7 @@ app.post('/generate', async (req, res) => {
         imageData = await generateWithStability(prompt, ratio);
         break;
       case 'openai':
+        if (!openai) throw new Error('❌ OpenAI não configurado!');
         imageData = await generateWithOpenAI(prompt);
         break;
       case 'replicate':
@@ -57,132 +57,123 @@ app.post('/generate', async (req, res) => {
   }
 });
 
-
-// 🔹 Hugging Face (modelo gratuito)
+// 🔹 Função Hugging Face (modelo gratuito)
 async function generateWithHuggingFace(prompt) {
-  if (!HUGGINGFACE_KEY) throw new Error('❌ Hugging Face não configurado!');
-  
+  const apiKey = process.env.HUGGINGFACE_API_KEY;
+  if (!apiKey) throw new Error('Chave de API do Hugging Face não configurada.');
+
   const modelURL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5";
 
   const response = await fetch(modelURL, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${HUGGINGFACE_KEY}`,
+      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ inputs: prompt, options: { wait_for_model: true } })
+    body: JSON.stringify({ inputs: prompt, options: { wait_for_model: true } }),
   });
 
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Hugging Face falhou: ${response.status} - ${err}`);
+    const errorBody = await response.text();
+    throw new Error(`Erro HuggingFace: ${response.status} ${response.statusText} - ${errorBody}`);
   }
 
   const buffer = await response.arrayBuffer();
   return Buffer.from(buffer).toString('base64');
 }
 
-// 🔹 Stability AI
+// 🔹 Função Stability AI
 async function generateWithStability(prompt, ratio = '1:1') {
-  if (!STABILITY_KEY) throw new Error('❌ Stability AI não configurado!');
+  const apiKey = process.env.STABILITY_API_KEY;
+  if (!apiKey) throw new Error('Chave de API da Stability AI não configurada.');
 
-  const sizes = { '1:1': [1024, 1024], '16:9': [1024, 576], '9:16': [576, 1024] };
+  const sizes = { '1:1':[1024,1024], '16:9':[1024,576], '9:16':[576,1024] };
   const [width, height] = sizes[ratio] || sizes['1:1'];
 
-  const enginesResp = await fetch('https://api.stability.ai/v1/engines/list', {
-    headers: { 'Authorization': `Bearer ${STABILITY_KEY}` }
+  const enginesResponse = await fetch('https://api.stability.ai/v1/engines/list', {
+    headers: { 'Authorization': `Bearer ${apiKey}` }
   });
-
-  if (!enginesResp.ok) {
-    const err = await enginesResp.text();
-    throw new Error(`Erro ao listar modelos Stability: ${enginesResp.status} - ${err}`);
+  if (!enginesResponse.ok) {
+    const errorBody = await enginesResponse.text();
+    throw new Error(`Erro ao listar modelos: ${enginesResponse.status} - ${errorBody}`);
   }
 
-  const engines = await enginesResp.json();
-  if (!engines.length) throw new Error('Nenhum modelo disponível na Stability AI.');
-  
+  const engines = await enginesResponse.json();
+  if (!engines || engines.length === 0) throw new Error('Nenhum modelo disponível na Stability AI.');
+
   const modelId = engines[0].id;
   console.log(`✅ Usando modelo Stability AI: ${modelId}`);
 
-  const response = await fetch(`https://api.stability.ai/v1/generation/${modelId}/text-to-image`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${STABILITY_KEY}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    },
-    body: JSON.stringify({
-      text_prompts: [{ text: prompt }],
-      cfg_scale: 7,
-      height,
-      width,
-      samples: 1,
-      steps: 30
-    })
-  });
+  const response = await fetch(
+    `https://api.stability.ai/v1/generation/${modelId}/text-to-image`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        text_prompts: [{ text: prompt }],
+        cfg_scale: 7,
+        height,
+        width,
+        samples: 1,
+        steps: 30,
+      }),
+    }
+  );
 
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Stability AI falhou: ${response.status} - ${err}`);
+    const errorBody = await response.text();
+    throw new Error(`Erro Stability AI: ${response.status} ${response.statusText} - ${errorBody}`);
   }
 
   const data = await response.json();
   const base64 = data.artifacts?.[0]?.base64;
-  if (!base64) throw new Error('Resposta inválida da Stability AI.');
+  if (!base64) throw new Error("Resposta inválida da Stability AI.");
   return base64;
 }
 
-// 🔹 OpenAI DALL·E
+// 🔹 Função OpenAI DALL·E
 async function generateWithOpenAI(prompt) {
-  if (!OPENAI_KEY) throw new Error('❌ OpenAI não configurado!');
-
-  const client = new OpenAI({ apiKey: OPENAI_KEY });
-
-  const result = await client.images.generate({
-    model: 'gpt-image-1',
+  const result = await openai.images.generate({
+    model: "gpt-image-1",
     prompt,
-    size: '1024x1024'
+    size: "1024x1024",
+    n: 1
   });
-
   const base64 = result.data[0].b64_json;
-  if (!base64) throw new Error('Resposta inválida da OpenAI.');
+  if (!base64) throw new Error("Resposta inválida da OpenAI.");
   return base64;
 }
 
-// 🔹 Replicate
+// 🔹 Função Replicate
 async function generateWithReplicate(prompt) {
-  if (!REPLICATE_KEY) throw new Error('❌ Replicate não configurado!');
+  const token = process.env.REPLICATE_API_TOKEN;
+  if (!token) throw new Error('Chave Replicate não configurada.');
 
-  const modelVersion = 'd1afeac2-c19a-4d8a-aea7-08c51b5adbe4'; // seu modelo Replicate
-  const resp = await fetch('https://api.replicate.com/v1/predictions', {
+  const response = await fetch('https://api.replicate.com/v1/predictions', {
     method: 'POST',
-    headers: { 'Authorization': `Token ${REPLICATE_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ version: modelVersion, input: { prompt } })
+    headers: {
+      'Authorization': `Token ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      version: "7de6b0d38b3d5f53b5179c45dfce8881e52da9ff563baf2ec52f089f44a1d9eb", // Stable Diffusion v1.5
+      input: { prompt }
+    }),
   });
 
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`Erro ao criar predição Replicate: ${resp.status} - ${err}`);
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Erro Replicate: ${response.status} - ${errorBody}`);
   }
 
-  const data = await resp.json();
-  let output = null;
-
-  while (!output) {
-    const statusResp = await fetch(`https://api.replicate.com/v1/predictions/${data.id}`, {
-      headers: { 'Authorization': `Token ${REPLICATE_KEY}` }
-    });
-
-    const statusData = await statusResp.json();
-
-    if (statusData.status === 'succeeded') output = statusData.output[0];
-    else if (statusData.status === 'failed') throw new Error(`Predição Replicate falhou: ${JSON.stringify(statusData, null, 2)}`);
-    else await new Promise(r => setTimeout(r, 1000));
-  }
-
-  const imgResp = await fetch(output);
-  const buffer = await imgResp.arrayBuffer();
-  return Buffer.from(buffer).toString('base64');
+  const data = await response.json();
+  const base64 = data.output?.[0]?.split(",")[1]; // remove "data:image/png;base64,"
+  if (!base64) throw new Error("Resposta inválida da Replicate.");
+  return base64;
 }
 
 // Iniciar servidor
