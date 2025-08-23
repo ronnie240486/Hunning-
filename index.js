@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
-import fetch from 'node-fetch';
 import OpenAI from 'openai';
 
 const app = express();
@@ -61,7 +60,7 @@ app.post('/generate', async (req, res) => {
   }
 });
 
-// 🔹 Função Hugging Face (modelo gratuito)
+// 🔹 Função Hugging Face
 async function generateWithHuggingFace(prompt) {
   const apiKey = process.env.HUGGINGFACE_API_KEY;
   if (!apiKey) throw new Error('Chave de API do Hugging Face não configurada.');
@@ -74,10 +73,7 @@ async function generateWithHuggingFace(prompt) {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      inputs: prompt,
-      options: { wait_for_model: true }
-    }),
+    body: JSON.stringify({ inputs: prompt, options: { wait_for_model: true } }),
   });
 
   if (!response.ok) {
@@ -94,11 +90,7 @@ async function generateWithStability(prompt, ratio = '1:1') {
   const apiKey = process.env.STABILITY_API_KEY;
   if (!apiKey) throw new Error('Chave de API da Stability AI não configurada.');
 
-  const sizes = {
-    '1:1': [1024, 1024],
-    '16:9': [1024, 576],
-    '9:16': [576, 1024]
-  };
+  const sizes = { '1:1': [1024, 1024], '16:9': [1024, 576], '9:16': [576, 1024] };
   const [width, height] = sizes[ratio] || sizes['1:1'];
 
   const enginesResponse = await fetch('https://api.stability.ai/v1/engines/list', {
@@ -117,19 +109,8 @@ async function generateWithStability(prompt, ratio = '1:1') {
 
   const response = await fetch(`https://api.stability.ai/v1/generation/${modelId}/text-to-image`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    },
-    body: JSON.stringify({
-      text_prompts: [{ text: prompt }],
-      cfg_scale: 7,
-      height,
-      width,
-      samples: 1,
-      steps: 30,
-    }),
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({ text_prompts: [{ text: prompt }], cfg_scale: 7, height, width, samples: 1, steps: 30 }),
   });
 
   if (!response.ok) {
@@ -152,10 +133,7 @@ async function generateWithReplicate(prompt) {
 
   const response = await fetch("https://api.replicate.com/v1/predictions", {
     method: "POST",
-    headers: {
-      "Authorization": `Token ${apiKey}`,
-      "Content-Type": "application/json"
-    },
+    headers: { "Authorization": `Token ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({ version: modelVersion, input: { prompt } })
   });
 
@@ -185,12 +163,7 @@ async function generateWithReplicate(prompt) {
 
 // 🔹 Função OpenAI DALL·E
 async function generateWithOpenAI(prompt) {
-  const result = await openai.images.generate({
-    model: "gpt-image-1",
-    prompt,
-    size: "1024x1024"
-  });
-
+  const result = await openai.images.generate({ model: "gpt-image-1", prompt, size: "1024x1024" });
   const base64 = result.data[0].b64_json;
   if (!base64) throw new Error("Resposta inválida da API OpenAI.");
   return base64;
