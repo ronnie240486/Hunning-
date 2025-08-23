@@ -1,13 +1,3 @@
-/* ================================================================================
-ARQUIVO: index.js
-INSTRUÇÕES:
-1. Este código foi atualizado para fornecer mensagens de erro mais detalhadas.
-2. Substitua o conteúdo do seu index.js na Railway por este código.
-3. Faça o deploy e tente gerar uma imagem com o Hugging Face.
-4. A nova mensagem de erro irá dizer-nos a causa exata do problema.
-================================================================================
-*/
-
 import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
@@ -47,7 +37,7 @@ app.post('/generate', async (req, res) => {
         }
         res.json({ base64: imageData });
     } catch (error) {
-        // MUDANÇA IMPORTANTE: Agora enviamos a mensagem de erro detalhada
+        // Envia a mensagem de erro detalhada para o frontend
         console.error(`Erro detalhado com ${service}:`, error.message);
         res.status(500).json({ error: `Falha ao gerar imagem com ${service}. Detalhes: ${error.message}` });
     }
@@ -70,7 +60,7 @@ async function generateWithHuggingFace(prompt) {
         }
     );
     
-    // MUDANÇA IMPORTANTE: Melhor verificação de erros da API
+    // Melhor verificação de erros da API
     if (!response.ok) {
         const errorBody = await response.text();
         throw new Error(`Erro da API Hugging Face: ${response.status} ${response.statusText} - ${errorBody}`);
