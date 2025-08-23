@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import fetch from 'node-fetch';
 import 'dotenv/config';
 
 const app = express();
@@ -12,7 +11,7 @@ app.use(express.json());
 
 // Rota Principal de verificação
 app.get('/', (req, res) => {
-    res.send('Backend do Gerador de Imagens está no ar!');
+    res.send('✅ Backend do Gerador de Imagens está no ar!');
 });
 
 // Rota de Geração de Imagem
@@ -37,9 +36,8 @@ app.post('/generate', async (req, res) => {
         }
         res.json({ base64: imageData });
     } catch (error) {
-        // Envia a mensagem de erro detalhada para o frontend
-        console.error(`Erro detalhado com ${service}:`, error.message);
-        res.status(500).json({ error: `Falha ao gerar imagem com ${service}. Detalhes: ${error.message}` });
+        console.error(`❌ Erro detalhado com ${service}:`, error.message);
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -59,8 +57,7 @@ async function generateWithHuggingFace(prompt) {
             body: JSON.stringify({ inputs: prompt }),
         }
     );
-    
-    // Melhor verificação de erros da API
+
     if (!response.ok) {
         const errorBody = await response.text();
         throw new Error(`Erro da API Hugging Face: ${response.status} ${response.statusText} - ${errorBody}`);
@@ -74,7 +71,8 @@ async function generateWithStability(prompt, ratio = '1:1') {
     const apiKey = process.env.STABILITY_API_KEY;
     if (!apiKey) throw new Error('Chave de API da Stability AI não configurada no backend.');
 
-    const [width, height] = { '1:1': [1024, 1024], '16:9': [1024, 576], '9:16': [576, 1024] }[ratio];
+    const sizes = { '1:1': [1024, 1024], '16:9': [1024, 576], '9:16': [576, 1024] };
+    const [width, height] = sizes[ratio] || sizes['1:1']; // fallback para 1:1
 
     const response = await fetch(
         "https://api.stability.ai/v1/generation/stable-diffusion-v1-6/text-to-image",
@@ -91,19 +89,19 @@ async function generateWithStability(prompt, ratio = '1:1') {
             }),
         }
     );
-    
+
     if (!response.ok) {
         const errorBody = await response.text();
         throw new Error(`Erro da API Stability: ${response.status} ${response.statusText} - ${errorBody}`);
     }
 
     const data = await response.json();
-    const base64 = data.artifacts[0].base64;
+    const base64 = data.artifacts?.[0]?.base64;
     if (!base64) throw new Error("Resposta inválida da API da Stability.");
     return base64;
 }
 
 // Iniciar o Servidor
 app.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
+    console.log(`🚀 Servidor rodando na porta ${PORT}`);
 });
