@@ -1,139 +1,158 @@
 import express from 'express';
 import cors from 'cors';
+import fetch from 'node-fetch';
 import 'dotenv/config';
 import OpenAI from 'openai';
 
-// ------------------------
-// CONFIGURAÇÃO DE CHAVES
-// ------------------------
-const OPENAI_KEY = process.env.OPENAI_API_KEY || '';
-const REPLICATE_KEY = process.env.REPLICATE_API_TOKEN || '';
-const HUGGINGFACE_KEY = process.env.HUGGINGFACE_API_KEY || '';
-const STABILITY_KEY = process.env.STABILITY_API_KEY || '';
+const app = express();
 const PORT = process.env.PORT || 8080;
 
-// ------------------------
-// VALIDAR CHAVES
-// ------------------------
-if (!OPENAI_KEY) console.warn('❌ Variável de ambiente OPENAI_API_KEY não definida!');
-if (!REPLICATE_KEY) console.warn('❌ Variável de ambiente REPLICATE_API_TOKEN não definida!');
-if (!HUGGINGFACE_KEY) console.warn('❌ Variável de ambiente HUGGINGFACE_API_KEY não definida!');
-if (!STABILITY_KEY) console.warn('❌ Variável de ambiente STABILITY_API_KEY não definida!');
+// Chaves
+const HUGGINGFACE_KEY = process.env.HUGGINGFACE_API_KEY;
+const STABILITY_KEY = process.env.STABILITY_API_KEY;
+const OPENAI_KEY = process.env.OPENAI_API_KEY;
+const REPLICATE_KEY = process.env.REPLICATE_API_TOKEN;
 
-// ------------------------
-// CLIENTES
-// ------------------------
-let openai;
-if (OPENAI_KEY) {
-  openai = new OpenAI({ apiKey: OPENAI_KEY });
-}
-
-// ------------------------
-// APP CONFIG
-// ------------------------
-const app = express();
+// Middlewares
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json());
 
-// ------------------------
-// ROTAS
-// ------------------------
+// ✅ Rota principal
 app.get('/', (req, res) => {
   res.send('🚀 Backend Media AI ativo!');
 });
 
+// ✅ Rota de geração de imagem
 app.post('/generate', async (req, res) => {
-  const { service, prompt, ratio = '1:1' } = req.body;
+  const { service, prompt, ratio } = req.body;
 
-  if (!service || !prompt) return res.status(400).json({ error: 'Serviço e prompt são obrigatórios.' });
+  if (!service || !prompt) {
+    return res.status(400).json({ error: 'Serviço e prompt são obrigatórios.' });
+  }
 
   try {
     let imageData;
+
     switch (service) {
       case 'huggingface':
-        if (!HUGGINGFACE_KEY) throw new Error('❌ Hugging Face não configurado!');
         imageData = await generateWithHuggingFace(prompt);
         break;
-
       case 'stability':
-        if (!STABILITY_KEY) throw new Error('❌ Stability AI não configurado!');
         imageData = await generateWithStability(prompt, ratio);
         break;
-
-      case 'replicate':
-        if (!REPLICATE_KEY) throw new Error('❌ Replicate não configurado!');
-        imageData = await generateWithReplicate(prompt);
-        break;
-
       case 'openai':
-        if (!OPENAI_KEY) throw new Error('❌ OpenAI não configurado!');
         imageData = await generateWithOpenAI(prompt);
         break;
-
+      case 'replicate':
+        imageData = await generateWithReplicate(prompt);
+        break;
       default:
         return res.status(400).json({ error: 'Serviço de IA desconhecido.' });
     }
 
     res.json({ base64: imageData });
-  } catch (err) {
-    console.error(`❌ Erro detalhado com ${service}:`, err.message);
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    console.error(`❌ Erro detalhado com ${service}:`, error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// ------------------------
-// FUNÇÕES DE GERAÇÃO
-// ------------------------
 
-// Hugging Face
+// 🔹 Hugging Face (modelo gratuito)
 async function generateWithHuggingFace(prompt) {
-  const url = 'https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5';
-  const response = await fetch(url, {
+  if (!HUGGINGFACE_KEY) throw new Error('❌ Hugging Face não configurado!');
+  
+  const modelURL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5";
+
+  const response = await fetch(modelURL, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${HUGGINGFACE_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ inputs: prompt, options: { wait_for_model: true } }),
+    headers: {
+      'Authorization': `Bearer ${HUGGINGFACE_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ inputs: prompt, options: { wait_for_model: true } })
   });
 
   if (!response.ok) {
     const err = await response.text();
-    throw new Error(`Erro Hugging Face: ${response.status} - ${err}`);
+    throw new Error(`Hugging Face falhou: ${response.status} - ${err}`);
   }
 
   const buffer = await response.arrayBuffer();
   return Buffer.from(buffer).toString('base64');
 }
 
-// Stability AI
-async function generateWithStability(prompt, ratio) {
+// 🔹 Stability AI
+async function generateWithStability(prompt, ratio = '1:1') {
+  if (!STABILITY_KEY) throw new Error('❌ Stability AI não configurado!');
+
   const sizes = { '1:1': [1024, 1024], '16:9': [1024, 576], '9:16': [576, 1024] };
   const [width, height] = sizes[ratio] || sizes['1:1'];
 
-  const enginesRes = await fetch('https://api.stability.ai/v1/engines/list', {
+  const enginesResp = await fetch('https://api.stability.ai/v1/engines/list', {
     headers: { 'Authorization': `Bearer ${STABILITY_KEY}` }
   });
-  if (!enginesRes.ok) throw new Error('Erro ao listar modelos Stability.');
-  const engines = await enginesRes.json();
-  const modelId = engines[0]?.id;
+
+  if (!enginesResp.ok) {
+    const err = await enginesResp.text();
+    throw new Error(`Erro ao listar modelos Stability: ${enginesResp.status} - ${err}`);
+  }
+
+  const engines = await enginesResp.json();
+  if (!engines.length) throw new Error('Nenhum modelo disponível na Stability AI.');
+  
+  const modelId = engines[0].id;
+  console.log(`✅ Usando modelo Stability AI: ${modelId}`);
 
   const response = await fetch(`https://api.stability.ai/v1/generation/${modelId}/text-to-image`, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${STABILITY_KEY}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify({ text_prompts: [{ text: prompt }], cfg_scale: 7, height, width, samples: 1, steps: 30 }),
+    headers: {
+      'Authorization': `Bearer ${STABILITY_KEY}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({
+      text_prompts: [{ text: prompt }],
+      cfg_scale: 7,
+      height,
+      width,
+      samples: 1,
+      steps: 30
+    })
   });
 
   if (!response.ok) {
     const err = await response.text();
-    throw new Error(`Erro Stability: ${response.status} - ${err}`);
+    throw new Error(`Stability AI falhou: ${response.status} - ${err}`);
   }
 
   const data = await response.json();
   const base64 = data.artifacts?.[0]?.base64;
-  if (!base64) throw new Error('Resposta inválida Stability.');
+  if (!base64) throw new Error('Resposta inválida da Stability AI.');
   return base64;
 }
 
-// Replicate
+// 🔹 OpenAI DALL·E
+async function generateWithOpenAI(prompt) {
+  if (!OPENAI_KEY) throw new Error('❌ OpenAI não configurado!');
+
+  const client = new OpenAI({ apiKey: OPENAI_KEY });
+
+  const result = await client.images.generate({
+    model: 'gpt-image-1',
+    prompt,
+    size: '1024x1024'
+  });
+
+  const base64 = result.data[0].b64_json;
+  if (!base64) throw new Error('Resposta inválida da OpenAI.');
+  return base64;
+}
+
+// 🔹 Replicate
 async function generateWithReplicate(prompt) {
+  if (!REPLICATE_KEY) throw new Error('❌ Replicate não configurado!');
+
   const modelVersion = 'd1afeac2-c19a-4d8a-aea7-08c51b5adbe4'; // seu modelo Replicate
   const resp = await fetch('https://api.replicate.com/v1/predictions', {
     method: 'POST',
@@ -142,13 +161,13 @@ async function generateWithReplicate(prompt) {
   });
 
   if (!resp.ok) {
-    const errorBody = await resp.text();
-    throw new Error(`Erro ao criar predição Replicate: ${resp.status} - ${errorBody}`);
+    const err = await resp.text();
+    throw new Error(`Erro ao criar predição Replicate: ${resp.status} - ${err}`);
   }
 
   const data = await resp.json();
-
   let output = null;
+
   while (!output) {
     const statusResp = await fetch(`https://api.replicate.com/v1/predictions/${data.id}`, {
       headers: { 'Authorization': `Token ${REPLICATE_KEY}` }
@@ -156,14 +175,9 @@ async function generateWithReplicate(prompt) {
 
     const statusData = await statusResp.json();
 
-    if (statusData.status === 'succeeded') {
-      output = statusData.output[0];
-    } else if (statusData.status === 'failed') {
-      // Retorna o JSON completo do erro
-      throw new Error(`Predição Replicate falhou: ${JSON.stringify(statusData, null, 2)}`);
-    } else {
-      await new Promise(r => setTimeout(r, 1000));
-    }
+    if (statusData.status === 'succeeded') output = statusData.output[0];
+    else if (statusData.status === 'failed') throw new Error(`Predição Replicate falhou: ${JSON.stringify(statusData, null, 2)}`);
+    else await new Promise(r => setTimeout(r, 1000));
   }
 
   const imgResp = await fetch(output);
@@ -171,19 +185,7 @@ async function generateWithReplicate(prompt) {
   return Buffer.from(buffer).toString('base64');
 }
 
-// OpenAI DALL·E
-async function generateWithOpenAI(prompt) {
-  try {
-    const result = await openai.images.generate({ model: 'gpt-image-1', prompt, size: '1024x1024' });
-    const base64 = result.data[0].b64_json;
-    if (!base64) throw new Error('Resposta inválida OpenAI.');
-    return base64;
-  } catch (err) {
-    throw new Error(`Erro OpenAI: ${err.message}`);
-  }
-}
-
-// ------------------------
-// START SERVER
-// ------------------------
-app.listen(PORT, () => console.log(`🔥 Servidor rodando na porta ${PORT}`));
+// Iniciar servidor
+app.listen(PORT, () => {
+  console.log(`🔥 Servidor rodando na porta ${PORT}`);
+});
