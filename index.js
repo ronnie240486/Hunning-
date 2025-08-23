@@ -3,11 +3,21 @@ import cors from 'cors';
 import 'dotenv/config';
 import OpenAI from 'openai';
 
+// ✅ Verifica se todas as variáveis essenciais estão definidas
+const requiredEnv = ['OPENAI_API_KEY', 'HUGGINGFACE_API_KEY', 'STABILITY_API_KEY', 'REPLICATE_API_TOKEN'];
+requiredEnv.forEach(key => {
+  if (!process.env[key] || process.env[key].trim() === '') {
+    console.error(`❌ Variável de ambiente ${key} não definida!`);
+  }
+});
+
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Config OpenAI
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Configuração do cliente OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 // Middlewares
 app.use(cors());
@@ -23,7 +33,6 @@ app.post('/generate', async (req, res) => {
   const { service, prompt, ratio, num_images = 1 } = req.body;
 
   if (!service || !prompt) return res.status(400).json({ error: 'Serviço e prompt são obrigatórios.' });
-
   if (num_images < 1 || num_images > 4) return res.status(400).json({ error: 'num_images deve ser entre 1 e 4.' });
 
   try {
