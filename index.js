@@ -22,13 +22,9 @@ app.get('/', (req, res) => {
 app.post('/generate', async (req, res) => {
   const { service, prompt, ratio, num_images = 1 } = req.body;
 
-  if (!service || !prompt) {
-    return res.status(400).json({ error: 'Serviço e prompt são obrigatórios.' });
-  }
+  if (!service || !prompt) return res.status(400).json({ error: 'Serviço e prompt são obrigatórios.' });
 
-  if (num_images < 1 || num_images > 4) {
-    return res.status(400).json({ error: 'num_images deve ser entre 1 e 4.' });
-  }
+  if (num_images < 1 || num_images > 4) return res.status(400).json({ error: 'num_images deve ser entre 1 e 4.' });
 
   try {
     const images = [];
@@ -69,10 +65,7 @@ async function generateWithHuggingFace(prompt) {
 
   const response = await fetch(modelURL, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ inputs: prompt, options: { wait_for_model: true } }),
   });
 
