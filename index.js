@@ -6,16 +6,27 @@ import OpenAI from 'openai';
 // ------------------------
 // CONFIGURAÇÃO DE CHAVES
 // ------------------------
-const OPENAI_KEY = process.env.OPENAI_API_KEY || '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';
-const REPLICATE_KEY = process.env.REPLICATE_API_TOKEN || 'COLOQUE_SUA_CHAVE_REPLICATE_AQUI';
-const HUGGINGFACE_KEY = process.env.HUGGINGFACE_API_KEY || 'COLOQUE_SUA_CHAVE_HUGGINGFACE_AQUI';
-const STABILITY_KEY = process.env.STABILITY_API_KEY || 'COLOQUE_SUA_CHAVE_STABILITY_AQUI';
+const OPENAI_KEY = process.env.OPENAI_API_KEY || '';
+const REPLICATE_KEY = process.env.REPLICATE_API_TOKEN || '';
+const HUGGINGFACE_KEY = process.env.HUGGINGFACE_API_KEY || '';
+const STABILITY_KEY = process.env.STABILITY_API_KEY || '';
 const PORT = process.env.PORT || 8080;
+
+// ------------------------
+// VALIDAR CHAVES
+// ------------------------
+if (!OPENAI_KEY) console.warn('❌ Variável de ambiente OPENAI_API_KEY não definida!');
+if (!REPLICATE_KEY) console.warn('❌ Variável de ambiente REPLICATE_API_TOKEN não definida!');
+if (!HUGGINGFACE_KEY) console.warn('❌ Variável de ambiente HUGGINGFACE_API_KEY não definida!');
+if (!STABILITY_KEY) console.warn('❌ Variável de ambiente STABILITY_API_KEY não definida!');
 
 // ------------------------
 // CLIENTES
 // ------------------------
-const openai = new OpenAI({ apiKey: OPENAI_KEY });
+let openai;
+if (OPENAI_KEY) {
+  openai = new OpenAI({ apiKey: OPENAI_KEY });
+}
 
 // ------------------------
 // APP CONFIG
@@ -40,17 +51,25 @@ app.post('/generate', async (req, res) => {
     let imageData;
     switch (service) {
       case 'huggingface':
+        if (!HUGGINGFACE_KEY) throw new Error('❌ Hugging Face não configurado!');
         imageData = await generateWithHuggingFace(prompt);
         break;
+
       case 'stability':
+        if (!STABILITY_KEY) throw new Error('❌ Stability AI não configurado!');
         imageData = await generateWithStability(prompt, ratio);
         break;
+
       case 'replicate':
+        if (!REPLICATE_KEY) throw new Error('❌ Replicate não configurado!');
         imageData = await generateWithReplicate(prompt);
         break;
+
       case 'openai':
+        if (!OPENAI_KEY) throw new Error('❌ OpenAI não configurado!');
         imageData = await generateWithOpenAI(prompt);
         break;
+
       default:
         return res.status(400).json({ error: 'Serviço de IA desconhecido.' });
     }
@@ -68,9 +87,7 @@ app.post('/generate', async (req, res) => {
 
 // Hugging Face
 async function generateWithHuggingFace(prompt) {
-  if (!HUGGINGFACE_KEY) throw new Error('Chave Hugging Face não configurada.');
   const url = 'https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5';
-
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${HUGGINGFACE_KEY}`, 'Content-Type': 'application/json' },
@@ -88,7 +105,6 @@ async function generateWithHuggingFace(prompt) {
 
 // Stability AI
 async function generateWithStability(prompt, ratio) {
-  if (!STABILITY_KEY) throw new Error('Chave Stability não configurada.');
   const sizes = { '1:1': [1024, 1024], '16:9': [1024, 576], '9:16': [576, 1024] };
   const [width, height] = sizes[ratio] || sizes['1:1'];
 
@@ -118,7 +134,6 @@ async function generateWithStability(prompt, ratio) {
 
 // Replicate
 async function generateWithReplicate(prompt) {
-  if (!REPLICATE_KEY) throw new Error('Chave Replicate não configurada.');
   const modelVersion = '7de6c8b2d04f84f6573c6c3f0bb50cbbf7c28787e63c15bb79b8dcf0e1f48f92';
 
   const resp = await fetch('https://api.replicate.com/v1/predictions', {
@@ -147,10 +162,14 @@ async function generateWithReplicate(prompt) {
 
 // OpenAI DALL·E
 async function generateWithOpenAI(prompt) {
-  const result = await openai.images.generate({ model: 'gpt-image-1', prompt, size: '1024x1024' });
-  const base64 = result.data[0].b64_json;
-  if (!base64) throw new Error('Resposta inválida OpenAI.');
-  return base64;
+  try {
+    const result = await openai.images.generate({ model: 'gpt-image-1', prompt, size: '1024x1024' });
+    const base64 = result.data[0].b64_json;
+    if (!base64) throw new Error('Resposta inválida OpenAI.');
+    return base64;
+  } catch (err) {
+    throw new Error(`Erro OpenAI: ${err.message}`);
+  }
 }
 
 // ------------------------
