@@ -1,7 +1,7 @@
 {
   "name": "media-ai-backend",
   "version": "1.0.0",
-  "description": "Backend para gerar imagens e vídeos usando APIs de IA",
+  "description": "Backend para gerar imagens usando APIs de IA: Hugging Face, Stability, Replicate e OpenAI",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -11,7 +11,8 @@
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.3.2",
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "openai": "^4.10.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
@@ -22,6 +23,8 @@
   "keywords": [
     "huggingface",
     "stability",
+    "replicate",
+    "openai",
     "express",
     "ai",
     "media-generation"
