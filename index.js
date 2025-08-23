@@ -1,3 +1,13 @@
+/* ================================================================================
+ARQUIVO: index.js
+INSTRUÇÕES:
+1. Este código foi atualizado para fornecer mensagens de erro mais detalhadas.
+2. Substitua o conteúdo do seu index.js na Railway por este código.
+3. Faça o deploy e tente gerar uma imagem com o Hugging Face.
+4. A nova mensagem de erro irá dizer-nos a causa exata do problema.
+================================================================================
+*/
+
 import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
@@ -15,7 +25,7 @@ app.get('/', (req, res) => {
     res.send('Backend do Gerador de Imagens está no ar!');
 });
 
-// Rota de Geração de Imagem - ESTA É A PARTE IMPORTANTE
+// Rota de Geração de Imagem
 app.post('/generate', async (req, res) => {
     const { service, prompt, ratio } = req.body;
 
@@ -37,8 +47,9 @@ app.post('/generate', async (req, res) => {
         }
         res.json({ base64: imageData });
     } catch (error) {
-        console.error(`Erro ao gerar imagem com ${service}:`, error.message);
-        res.status(500).json({ error: `Falha ao gerar imagem com ${service}.` });
+        // MUDANÇA IMPORTANTE: Agora enviamos a mensagem de erro detalhada
+        console.error(`Erro detalhado com ${service}:`, error.message);
+        res.status(500).json({ error: `Falha ao gerar imagem com ${service}. Detalhes: ${error.message}` });
     }
 });
 
@@ -58,7 +69,13 @@ async function generateWithHuggingFace(prompt) {
             body: JSON.stringify({ inputs: prompt }),
         }
     );
-    if (!response.ok) throw new Error(`Erro da API Hugging Face: ${response.statusText}`);
+    
+    // MUDANÇA IMPORTANTE: Melhor verificação de erros da API
+    if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`Erro da API Hugging Face: ${response.status} ${response.statusText} - ${errorBody}`);
+    }
+
     const buffer = await response.arrayBuffer();
     return Buffer.from(buffer).toString('base64');
 }
@@ -84,7 +101,12 @@ async function generateWithStability(prompt, ratio = '1:1') {
             }),
         }
     );
-    if (!response.ok) throw new Error(`Erro da API Stability: ${response.statusText}`);
+    
+    if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`Erro da API Stability: ${response.status} ${response.statusText} - ${errorBody}`);
+    }
+
     const data = await response.json();
     const base64 = data.artifacts[0].base64;
     if (!base64) throw new Error("Resposta inválida da API da Stability.");
