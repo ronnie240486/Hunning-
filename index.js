@@ -44,28 +44,28 @@ app.post('/generate', async (req, res) => {
 
 // 🔹 Função Hugging Face
 async function generateWithHuggingFace(prompt) {
-  const apiKey = process.env.HUGGINGFACE_API_KEY;
-  if (!apiKey) throw new Error('Chave de API do Hugging Face não configurada.');
+    const apiKey = process.env.HUGGINGFACE_API_KEY;
+    if (!apiKey) throw new Error('Chave de API do Hugging Face não configurada no backend.');
 
-  const response = await fetch(
-    "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
-    {
-      method: 'POST',
-      headers: { 
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ inputs: prompt }),
+    const response = await fetch(
+        "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
+        {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ inputs: prompt }),
+        }
+    );
+
+    if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`Erro da API Hugging Face: ${response.status} ${response.statusText} - ${errorBody}`);
     }
-  );
 
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Erro da API Hugging Face: ${response.status} ${response.statusText} - ${errorBody}`);
-  }
-
-  const buffer = await response.arrayBuffer();
-  return Buffer.from(buffer).toString('base64');
+    const buffer = await response.arrayBuffer();
+    return Buffer.from(buffer).toString('base64');
 }
 
 // 🔹 Função Stability AI (pega primeiro modelo disponível automaticamente)
