@@ -134,25 +134,36 @@ async function generateWithStability(prompt, ratio) {
 
 // Replicate
 async function generateWithReplicate(prompt) {
-  const modelVersion = '7de6c8b2d04f84f6573c6c3f0bb50cbbf7c28787e63c15bb79b8dcf0e1f48f92';
-
+  const modelVersion = 'd1afeac2-c19a-4d8a-aea7-08c51b5adbe4'; // seu modelo Replicate
   const resp = await fetch('https://api.replicate.com/v1/predictions', {
     method: 'POST',
     headers: { 'Authorization': `Token ${REPLICATE_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ version: modelVersion, input: { prompt } })
   });
-  if (!resp.ok) throw new Error('Erro Replicate.');
+
+  if (!resp.ok) {
+    const errorBody = await resp.text();
+    throw new Error(`Erro ao criar predição Replicate: ${resp.status} - ${errorBody}`);
+  }
 
   const data = await resp.json();
+
   let output = null;
   while (!output) {
     const statusResp = await fetch(`https://api.replicate.com/v1/predictions/${data.id}`, {
       headers: { 'Authorization': `Token ${REPLICATE_KEY}` }
     });
+
     const statusData = await statusResp.json();
-    if (statusData.status === 'succeeded') output = statusData.output[0];
-    else if (statusData.status === 'failed') throw new Error('Falha no Replicate.');
-    else await new Promise(r => setTimeout(r, 1000));
+
+    if (statusData.status === 'succeeded') {
+      output = statusData.output[0];
+    } else if (statusData.status === 'failed') {
+      // Retorna o JSON completo do erro
+      throw new Error(`Predição Replicate falhou: ${JSON.stringify(statusData, null, 2)}`);
+    } else {
+      await new Promise(r => setTimeout(r, 1000));
+    }
   }
 
   const imgResp = await fetch(output);
