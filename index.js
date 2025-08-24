@@ -87,7 +87,12 @@ async function generateWithStability(prompt, ratio = '1:1') {
   const apiKey = process.env.STABILITY_API_KEY;
   if (!apiKey) throw new Error('❌ Stability AI não configurado!');
 
-  const sizes = { '1:1': [1024, 1024], '16:9': [1024, 576], '9:16': [576, 1024] };
+  // Ajuste das dimensões compatíveis com SDXL
+  const sizes = {
+    '1:1': [1024, 1024],
+    '16:9': [1536, 640],
+    '9:16': [640, 1536]
+  };
   const [width, height] = sizes[ratio] || sizes['1:1'];
 
   const enginesResponse = await fetch('https://api.stability.ai/v1/engines/list', {
@@ -132,6 +137,7 @@ async function generateWithStability(prompt, ratio = '1:1') {
   if (!base64) throw new Error("Resposta inválida da API da Stability.");
   return base64;
 }
+
 
 // OpenAI DALL·E
 async function generateWithOpenAI(prompt) {
