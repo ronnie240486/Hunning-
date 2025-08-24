@@ -157,39 +157,55 @@ async function generateWithOpenAI(prompt) {
   return base64;
 }
 
-// Replicate
-async function generateWithReplicate(prompt, ratio = '1:1') {
-  const token = process.env.REPLICATE_API_TOKEN;
-  if (!token) throw new Error('❌ Replicate não configurado!');
+// 🔹 Função Replicate
+import fetch from 'node-fetch';
 
-  const width = ratio === '16:9' ? 1024 : ratio === '9:16' ? 576 : 1024;
-  const height = ratio === '16:9' ? 576 : ratio === '9:16' ? 1024 : 1024;
+async function generateWithReplicate(prompt) {
+  const apiToken = process.env.REPLICATE_API_TOKEN;
+  if (!apiToken) throw new Error('❌ Variável REPLICATE_API_TOKEN não definida!');
 
-  const modelURL = "https://api.replicate.com/v1/predictions";
+  // Modelo gratuito ou pago que deseja usar
+  const modelVersion = "7de64d5e7b0a6fbb25b9f99e7f70f146f48db2c9b6b6f3a0d35f80368e8e45f3"; // exemplo: stable-diffusion
 
-  const response = await fetch(modelURL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Token ${token}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    },
-    body: JSON.stringify({
-      version: "d1afeac2-c19a-4d8a-aea7-08c51b5adbe4", // Substitua pelo modelo desejado
-      input: { prompt, width, height }
-    }),
-  });
+  try {
+    const response = await fetch("https://api.replicate.com/v1/predictions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Token ${apiToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        version: modelVersion,
+        input: { prompt }
+      })
+    });
 
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Erro Replicate: ${response.status} - ${errorBody}`);
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Erro Replicate: ${response.status} - ${errorBody}`);
+    }
+
+    const data = await response.json();
+
+    // ⚠️ A Replicate retorna a imagem na URL dentro de data.output
+    if (!data.output || data.output.length === 0) {
+      throw new Error("Resposta inválida da Replicate: sem output");
+    }
+
+    // Pega a primeira imagem em base64 ou URL
+    const imageUrl = data.output[0];
+
+    // Se quiser baixar e converter em base64:
+    const imageResponse = await fetch(imageUrl);
+    const buffer = await imageResponse.arrayBuffer();
+    return Buffer.from(buffer).toString('base64');
+
+  } catch (error) {
+    console.error("❌ Erro detalhado com replicate:", error.message);
+    throw error;
   }
-
-  const data = await response.json();
-  const base64 = data.output?.[0];
-  if (!base64) throw new Error("Resposta inválida da API Replicate.");
-  return base64;
 }
+
 
 // ====================== Iniciar Servidor ======================
 app.listen(PORT, () => {
