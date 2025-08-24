@@ -91,10 +91,10 @@ async function generateWithStability(prompt, ratio = '1:1') {
   if (!apiKey) throw new Error('❌ Variável STABILITY_API_KEY não definida.');
 
   const sizes = {
-    '1:1': [1024, 1024],
-    '16:9': [1024, 576],
-    '9:16': [576, 1024]
-  };
+  '1:1': [1024, 1024],
+  '16:9': [1024, 576],
+  '9:16': [640, 1536] // ✅ dimensões válidas para Stability XL
+};
   const [width, height] = sizes[ratio] || sizes['1:1'];
 
   const enginesResponse = await fetch('https://api.stability.ai/v1/engines/list', {
